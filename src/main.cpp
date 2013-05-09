@@ -69,9 +69,10 @@ int main(int argc, char *argv[])
 			if (QString(argv[3]) == "add") {
 				mainWin.loadFile(currentFile, true);
 			}
-			else 
-				std::cout << QFileInfo(currentFile).baseName().toUtf8().constData() << std::endl;
+			else { 
+				//std::cout << QFileInfo(currentFile).baseName().toUtf8().constData() << std::endl;
 				mainWin.loadFile(currentFile, false);
+      }
 		}
 	}
 	mainWin.show();

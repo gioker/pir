@@ -31,7 +31,7 @@ QString Database::dbName = "irisDB.txt";
 
 bool Database::add(QString fileName, bool bitCode[2048], bool bitCodeMask[2048], double& hamDist, QString& foundIris) {
 	// First search the database so that we're not adding a duplicate
-	for(int i=0; i < 2048; ++i) {
+	/*for(int i=0; i < 2048; ++i) {
 		if(i == 2047) {
 			qDebug() << "========= Number of useful bits was 0, so not adding ===========";
 			return false;
@@ -42,7 +42,7 @@ bool Database::add(QString fileName, bool bitCode[2048], bool bitCodeMask[2048],
 
 	if(search(fileName, bitCode, bitCodeMask, hamDist, foundIris))
 		return false;
-
+  */
 	QFile database(dbName);
 	database.open(QIODevice::Append);
 	if(database.error()) {

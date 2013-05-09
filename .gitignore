@@ -1,3 +1,4 @@
 iris
 *.o
 *.swp
+tmp
