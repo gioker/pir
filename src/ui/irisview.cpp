@@ -259,7 +259,7 @@ bool IrisView::loadImage(const QString s) {
 			qDebug() << "======================== Auto detection FAILED  ======================== ";
             emit autodetectFailed();
         }
-		qDebug("Image loading, detection and saving took: %d ms", t.elapsed());
+		//qDebug("Image loading, detection and saving took: %d ms", t.elapsed());
         return true;
     }
     return false;
