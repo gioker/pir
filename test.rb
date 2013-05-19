@@ -1,9 +1,10 @@
 #!/usr/bin/env ruby
 
 require 'fileutils'
+require 'set'
 
-class Plotter
-
+class FullResultsAnalyzer
+  
   def initialize(datafile=nil)
     @datafile = File.open(datafile, 'r')
     @histogram, @error_rates = {genuines: {}, impostors: {}}, {genuines: {}, impostors: {}}
@@ -18,7 +19,6 @@ class Plotter
   end
   
   def histogram
-#    gens = []
     genuines, impostors = [],[]
     regex = /_1_1.bmp/
     @datafile.each_line do |line|
@@ -26,7 +26,6 @@ class Plotter
       next if left >= right
       left_person, right_person = left.split('_').first, right.split('_').first
       if left_person == right_person
-#        gens << line
         genuines << dist.to_f.round(2)
       else
         next unless left =~ regex and right =~ regex
@@ -41,7 +40,6 @@ class Plotter
         file.print "#{@histogram[:genuines][key]} #{@histogram[:impostors][key]}\n"
       end
     end
-#    gens.sort.each_with_index { |v,i| print "#{i+1} #{v}" }
   end
   
   def error_rates
@@ -64,6 +62,81 @@ class Plotter
     1.upto(99) { |i| yield(i) }
     @error_rates[key].map! { |value| 100*value.to_f/total }
   end  
+end
+
+
+class ResultsAnalyzer
+
+  attr_reader :algos
+  
+  def initialize(datafiles=nil)
+    @datafiles = datafiles
+    @datafiles_grouped_by_algo = @datafiles.group_by { |v| File.basename(v).split('_').first }    
+    @algos = Set.new
+    reset
+  rescue Errno::ENOENT
+    print "Data file not found.\n"      
+    exit
+  end
+  
+  def reset
+    @histogram, @error_rates = {genuines: {}, impostors: {}}, {genuines: {}, impostors: {}}
+    101.times do |i|
+      key = (i.to_f/100)
+      @histogram.each { |k,v| @histogram[k][key] = 0 }
+      @error_rates.each { |k,v| @error_rates[k][key] = 0.0 }
+    end
+  end
+  
+  def histogram
+    @datafiles_grouped_by_algo.each do |algo,files| #algo = matlab/projectiris
+      @algos << algo
+      reset
+      @datafiles_grouped_by_algo[algo].sort!
+      files.each do |file|
+        dists = []
+        key = file =~ /genuines/ ? :genuines : :impostors
+        File.open(file, 'r').each_line { |line| dists << line.chomp.split('|').last.to_f.round(2) }
+        dists.inject(@histogram[key]) { |h, e| h[e] += 1 ; h }
+      end
+      File.open("results/histogram_#{algo}",'w') do |file|
+        101.times do |i|
+          key = i.to_f/100
+          file.print "#{@histogram[:genuines][key]} #{@histogram[:impostors][key]}\n"
+        end
+      end
+      error_rates(algo)
+    end
+  end
+  
+  def error_rates(algo)
+    values = @histogram[:impostors].values
+    tmp_sum = 0
+    error_rate(:impostors) { |i| tmp_sum += values[i-1]; @error_rates[:impostors][i] = tmp_sum }
+    values = @histogram[:genuines].values
+    tmp_sum = values.reduce(:+)
+    error_rate(:genuines) { |i| tmp_sum -= values[i-1]; @error_rates[:genuines][i] = tmp_sum  }
+    File.open("results/error_rates_#{algo}", 'w') do |file|
+      [@error_rates[:genuines], @error_rates[:impostors]].transpose.each { |g,i| file.puts "#{g} #{i}" }
+    end
+  end
+  
+  def error_rate(key)
+    @error_rates[key] = []
+    total = @histogram[key].values.reduce(:+)
+    @error_rates[key][0] = (key == :genuines) ? total : 0
+    @error_rates[key][100] = (key == :genuines) ? 0 : total
+    1.upto(99) { |i| yield(i) }
+    @error_rates[key].map! { |value| 100*value.to_f/total }
+  end  
+end
+
+
+class Plotter
+
+  def initialize(algos=nil)
+    @algos = algos
+  end
   
   def style
     [ "set termoption dash",
@@ -90,24 +163,33 @@ class Plotter
     ]
   end
 
-  def plot_histogram
-    gp = IO.popen("gnuplot",'w')
-    gp.print "set xtics ('0' 0, '0.2' 20, '0.4' 40, '0.6' 60, '0.8' 80, '1' 100);"
-    gp.print "set term pngcairo; set output 'hist.png'; set boxwidth 3; set logscale y; set yrange [0.1:1000];"
-    puts "histogram_#{@datafile.path}"
-    gp.print "plot 'histogram_#{@datafile.path}' u 1 w histograms, '' u 2 w histograms\n"
+  def histogram(algo)
+    plot({title: "Histogram", xlabel: "Hamming distance", ylabel: "Frequency", filename_prefix: "histogram_#{algo}", logscale: "y", xrange: "[-1:101]", yrange: "[0.1:1000]", xtics: "('0' 0, '0.1' 10, '0.2' 20, '0.3' 30, '0.4' 40, '0.5' 50, '0.6' 60, '0.7' 70, '0.8' 80, '0.9' 90, '1' 100)", ytics: "10" }) do
+      "plot 'results/histogram_#{algo}' u 2 w histograms fs transparent pattern 1 title 'impostors', '' u 1 w histograms fs transparent pattern 2 title 'genuines'"
+    end
+  end
+  
+  def error_rates(algo)
+    plot({title: "Error distributions", xlabel: "Threshold", ylabel: "Error (%)", filename_prefix: "distributions_#{algo}", logscale: false, xrange: "[0:100]", yrange: "[0:100]", xtics: "('0' 0, '0.1' 10, '0.2' 20, '0.3' 30, '0.4' 40, '0.5' 50, '0.6' 60, '0.7' 70, '0.8' 80, '0.9' 90, '1' 100)", ytics: "10" }) do
+      "plot 'results/error_rates_#{algo}' u 1 w l ls 1 title 'FNMR(t)', '' u 2 w l ls 2 title 'FMR(t)'"
+      end
+  end
+  
+  def roc(cmd)
+    plot({title: "ROC Curve", xlabel: "FMR", ylabel: "100-FMR", filename_prefix: "roc", logscale: "xy", xrange: "[0.01:100]", yrange: "[70:100]", xtics: "10", ytics: "('70' 70, '100' 100)" }) do
+      "plot #{cmd}"
+    end
   end
   
   def plot_graphs
-    plot({title: "Histogram", xlabel: "Hamming distance", ylabel: "Frequency", filename_prefix: "histogram", logscale: "y", xrange: "[-1:101]", yrange: "[0.1:1000]", xtics: "('0' 0, '0.1' 10, '0.2' 20, '0.3' 30, '0.4' 40, '0.5' 50, '0.6' 60, '0.7' 70, '0.8' 80, '0.9' 90, '1' 100)", ytics: "10" }) do
-      "plot 'histogram_#{@datafile.path}' u 2 w histograms fs transparent pattern 1 title 'impostors', '' u 1 w histograms fs transparent pattern 2 title 'genuines'"
+    roc_cmd = ""
+    @algos.each_with_index do |algo, index|
+      histogram(algo)
+      error_rates(algo)      
+      roc_cmd << "'results/error_rates_#{algo}' u 2:(100-$1) w l ls #{(index+1)%5} title '#{algo}'"
+      roc_cmd << ", " unless index == (@algos.length-1) 
     end
-    plot({title: "Error distributions", xlabel: "Threshold", ylabel: "Error (%)", filename_prefix: "distributions", logscale: false, xrange: "[0:100]", yrange: "[0:100]", xtics: "('0' 0, '0.1' 10, '0.2' 20, '0.3' 30, '0.4' 40, '0.5' 50, '0.6' 60, '0.7' 70, '0.8' 80, '0.9' 90, '1' 100)", ytics: "10" }) do
-      "plot 'error_rates_#{@datafile.path}' u 1 w l ls 1 title 'FNMR(t)', '' u 2 w l ls 2 title 'FMR(t)'"
-    end
-    plot({title: "ROC Curve", xlabel: "FMR", ylabel: "100-FMR", filename_prefix: "roc", logscale: false, xrange: "[0:100]", yrange: "[0:100]", xtics: "10", ytics: "10" }) do
-      "plot 'error_rates_#{@datafile.path}' u 2:(100-$1) w l ls 1 title 'projectiris'"
-    end
+    roc(roc_cmd)
   end
 
   def plot(data, &plot_cmd)
@@ -115,7 +197,7 @@ class Plotter
     gp.puts "set xlabel '#{data[:xlabel]}'"
     gp.puts "set ylabel '#{data[:ylabel]}'"
     filename = "#{data[:filename_prefix]}.png"
-    gp.puts "set output '#{filename}'"
+    gp.puts "set output 'results/#{filename}'"
     gp.puts "set xrange #{data[:xrange]}" if data[:xrange]
     gp.puts "set yrange #{data[:yrange]}" if data[:yrange]
     gp.puts "set xtics #{data[:xtics]} nomirror" if data[:xtics]
@@ -130,9 +212,8 @@ class Plotter
   
 end
 
-file = ARGV[0]
 
-p = Plotter.new(file)
-p.histogram
-p.error_rates
+ra = ResultsAnalyzer.new(ARGV)
+ra.histogram
+p = Plotter.new(ra.algos)
 p.plot_graphs
