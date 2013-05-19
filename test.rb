@@ -17,19 +17,36 @@ results_file.each_line do |line|
   left_person = left.split('_').first
   right_person = right.split('_').first
   if left_person == right_person
-    intra << dist.to_f
+    intra << dist.to_f.round(2)
   else
     next unless left.match(regex) and right.match(regex)
 #    print left, " | ", right, "\n"
-    inter << dist.to_f
+    inter << dist.to_f.round(2)
   end
 end
+
+intra_hist = intra.inject(Hash.new(0)) { |h, e| h[e] += 1 ; h }
+inter_hist = inter.inject(Hash.new(0)) { |h, e| h[e] += 1 ; h }
 
 print intra.length, " distances in intra\n"
 print inter.length, " distances in inter\n"
 #p intra.sort
-File.open("intra_dists.txt", 'w') { |f| f.puts intra.sort }
-
+File.open("intra_dists.txt", 'w') do |f|
+  100.times do |i|
+    key = i.to_f/100
+    val = intra_hist[key]
+    val = 0 if val.nil?
+    f.puts "#{key} #{val}"
+  end
+end
+File.open("inter_dists.txt", 'w') do |f|
+  100.times do |i|
+    key = i.to_f/100
+    val = inter_hist[key]
+    val = 0 if val.nil?
+    f.puts "#{key} #{val}"
+  end
+end
 
 def plot_intra
   gp = IO.popen('gnuplot', 'w')
@@ -47,4 +64,4 @@ def plot_intra
   gp.puts "plot 'intra_dists.txt' u 1 w histograms title 'intra'"
 end
 
-plot_intra
+#plot_intra
