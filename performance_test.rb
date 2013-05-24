@@ -71,16 +71,17 @@ end
 class ResultsAnalyzer
 
   attr_reader :algos, :eer
-  
+  EXCEPTIONS = [Errno::ENOENT, Errno::EISDIR]
   def initialize(datafiles=nil)
+    datafiles.each { |f| File.open(f,'r').each_line {} } # test if files are valid, i.e., are not directories and existing
     @datafiles = datafiles # e.g. matches/masek_genuines.txt and matches/masek_impostors.txt
     @datafiles_grouped_by_algo = @datafiles.group_by { |v| File.basename(v).split('_').first } # {"masek"=>["matches/masek_genuines.txt", "matches/masek_impostors.txt"], "projectiris"=>["matches/projectiris_genuines.txt", "matches/projectiris_impostors.txt"]}
     @algos = Set.new # masek and projectiris
     @eer = {} # Equal Error Rate
     reset
-  rescue Errno::ENOENT
-    print "Data file not found.\n"
-    print "Example usage: ./performance_test matches/*\n"
+  rescue *EXCEPTIONS
+    print "Invalid data file(s).\n"
+    print "Example usage: ./performance_test.rb matches/*\n"
     exit
   end
   
