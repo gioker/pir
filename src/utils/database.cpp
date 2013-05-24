@@ -32,17 +32,17 @@ QString Database::dbName = "irisDB.txt";
 bool Database::add(QString fileName, bool bitCode[2048], bool bitCodeMask[2048], double& hamDist, QString& foundIris) {
 	// First search the database so that we're not adding a duplicate
 	/*for(int i=0; i < 2048; ++i) {
-		if(i == 2047) {
-			qDebug() << "========= Number of useful bits was 0, so not adding ===========";
-			return false;
-		}
-		if(bitCodeMask[i] == true)
-			break;
-	}
+	  if(i == 2047) {
+	  qDebug() << "========= Number of useful bits was 0, so not adding ===========";
+	  return false;
+	  }
+	  if(bitCodeMask[i] == true)
+	  break;
+	  }
 
-	if(search(fileName, bitCode, bitCodeMask, hamDist, foundIris))
-		return false;
-  */
+	  if(search(fileName, bitCode, bitCodeMask, hamDist, foundIris))
+	  return false;
+	 */
 	QFile database(dbName);
 	database.open(QIODevice::Append);
 	if(database.error()) {
@@ -64,7 +64,7 @@ bool Database::add(QString fileName, bool bitCode[2048], bool bitCodeMask[2048],
 		file << irisCode.getMask(count);
 		file << ' ';
 	}
-		file << '\n';
+	file << '\n';
 
 	database.close();
 	// If all was well, then it was added to the DB, so return true
@@ -86,64 +86,64 @@ bool Database::search(QString fileName, bool bitCode[2048], bool bitCodeMask[204
 	bool found = false;
 
 
-		//irisCode.print();
+	//irisCode.print();
 
+	database.open(QIODevice::ReadOnly);
+	// If the file doesn't exist, we would get an error here
+	if(database.error()) {
+		// ...so create the file first
+		qDebug() << "No database file (called" << dbName << ") was found. Creating...";
+		database.open(QIODevice::WriteOnly);
+		database.close();
 		database.open(QIODevice::ReadOnly);
-		// If the file doesn't exist, we would get an error here
-		if(database.error()) {
-			// ...so create the file first
-			qDebug() << "No database file (called" << dbName << ") was found. Creating...";
-			database.open(QIODevice::WriteOnly);
-			database.close();
-			database.open(QIODevice::ReadOnly);
-		}
-
-		QTextStream file(&database);
-		if(database.error())
-			qDebug() << "Massive fail: couldn't open DB";
-
-		// Search through the whole file for each iris code
-		while(!file.atEnd()) {
-		  min = 1.0;
-		  file >> tempWord;  // the iris' name that we've just taken in
-  	  if(tempWord == "") // It's the empty space at the end, boys.
-			  break;
-			  for(int count = 0; count < 64; ++count)
-				  file >> tempBitCode[count];
-			  for(int count = 0; count < 64; ++count)
-				  file >> tempMaskCode[count];
-			  tempIrisCode = new IrisCode(tempBitCode, tempMaskCode);
-
-	    for(rotation = -56; rotation <= 56; rotation += 8) {
-    		IrisCode irisCode(bitCode, bitCodeMask, rotation);
-
-			  hamDist = irisCode.compare_with(tempIrisCode);
-			
-			  // Perform all rotations, and just find the min
-			  if(hamDist < min) {
-				  min = hamDist;
-				  minRotation = rotation;
-				  foundIris = tempWord;
-			  }
-
-			}
-		  //qDebug() << "With file:" << tempWord << "at rotation"<< rotation / 8 << "hamming distance is:" << hamDist;
-		  delete tempIrisCode;
-		  std::cout << fileName.toUtf8().constData() << "|" << tempWord.toUtf8().constData() << "|" << min << std::endl;
-		  if (min <= threshold) {
-		    found = true;
-		  }
-		}
-
-		database.close();
-/*
-	if(min <= threshold) {
-		hamDist = min;
-		qDebug() << "Iris found! With Hamming distance of" << min << "name is:" << foundIris << "and with" << minRotation / 8 << "rotations";
-		database.close();
-		return true;
 	}
-*/
+
+	QTextStream file(&database);
+	if(database.error())
+		qDebug() << "Massive fail: couldn't open DB";
+
+	// Search through the whole file for each iris code
+	while(!file.atEnd()) {
+		min = 1.0;
+		file >> tempWord;  // the iris' name that we've just taken in
+		if(tempWord == "") // It's the empty space at the end, boys.
+			break;
+		for(int count = 0; count < 64; ++count)
+			file >> tempBitCode[count];
+		for(int count = 0; count < 64; ++count)
+			file >> tempMaskCode[count];
+		tempIrisCode = new IrisCode(tempBitCode, tempMaskCode);
+
+		for(rotation = -56; rotation <= 56; rotation += 8) {
+			IrisCode irisCode(bitCode, bitCodeMask, rotation);
+
+			hamDist = irisCode.compare_with(tempIrisCode);
+
+			// Perform all rotations, and just find the min
+			if(hamDist < min) {
+				min = hamDist;
+				minRotation = rotation;
+				foundIris = tempWord;
+			}
+
+		}
+		//qDebug() << "With file:" << tempWord << "at rotation"<< rotation / 8 << "hamming distance is:" << hamDist;
+		delete tempIrisCode;
+		std::cout << fileName.toUtf8().constData() << "|" << tempWord.toUtf8().constData() << "|" << min << std::endl;
+		if (min <= threshold) {
+			found = true;
+		}
+	}
+
+	database.close();
+	/*
+	   if(min <= threshold) {
+	   hamDist = min;
+	   qDebug() << "Iris found! With Hamming distance of" << min << "name is:" << foundIris << "and with" << minRotation / 8 << "rotations";
+	   database.close();
+	   return true;
+	   }
+	 */
 	return found;
 }
 

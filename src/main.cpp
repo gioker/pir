@@ -52,11 +52,6 @@ int main(int argc, char *argv[])
 	// Allow us to do some batch filtering on images
 	else if(argc == 4 && QString(argv[1]) == "-b") {
 		QString inputFolder = QDir::currentPath() + "/" + argv[2];
-		//		QString outputFolder = QDir::currentPath() + "/" + argv[3];
-		QDir outputDir;
-
-		// Create output directory if it doesn't exist yet
-		//outputDir.mkdir(outputFolder); 
 		QStringList filterList;
 		// Filter to only one image per person
 		filterList << "*.bmp";
@@ -65,16 +60,20 @@ int main(int argc, char *argv[])
 		QDirIterator it(inputFolder, filterList, QDir::Files, QDirIterator::Subdirectories);
 		while (it.hasNext()) {
 			QString currentFile = it.next();
-			//qDebug() << "Now converting" << QFileInfo(currentFile).baseName();
+			// with argument "add", add files to database
 			if (QString(argv[3]) == "add") {
 				mainWin.loadFile(currentFile, true);
 			}
+			// any other argument checks for matches in the database printing all pairs with their scores
 			else { 
-				//std::cout << QFileInfo(currentFile).baseName().toUtf8().constData() << std::endl;
 				mainWin.loadFile(currentFile, false);
-      }
+			}
 		}
 	}
-	mainWin.show();
-	return app.exec();
+	else if (argc == 1) {
+		// print usage information in case somebody wants to know about it
+		qDebug() << "usage " << argv[0] << " -b " << " <image folder> " << "[add|check]";
+		mainWin.show();
+		return app.exec();
+	}
 }
