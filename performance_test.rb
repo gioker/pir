@@ -84,37 +84,45 @@ class ResultsAnalyzer
     exit
   end
   
+  # Reset histograms and error rates and initialize them with zeroes.
   def reset
     @histogram, @error_rates = {genuines: {}, impostors: {}}, {genuines: {}, impostors: {}}
-    101.times do |i|
+    (0..100).each do |i|
       key = (i.to_f/100)
       @histogram.each { |k,v| @histogram[k][key] = 0 }
       @error_rates.each { |k,v| @error_rates[k][key] = 0.0 }
     end
   end
   
+  # Gets the lowest and highest score.
   def range(values)
-    values.minmax
+    return values.minmax
   end
   
+  # Computes the mean of all scores.
   def mean(values, count)
-    values.reduce(:+)/count
+    return values.reduce(:+)/count
   end
   
+  # Computes the median of all scores.
   def median(values)
     sorted = values.sort
     len = sorted.length
     return (sorted[(len - 1) / 2] + sorted[len / 2]) / 2.0
   end
-  
+
+  # Computes the variance of all scores.  
   def variance(values, mean, count)
-    values.inject(0) { |sum, s| sum + (s-mean)**2 }/count
+    return values.inject(0) { |sum, s| sum + (s-mean)**2 }/count
   end
   
+  # Computes the standard deviation of all scores.
   def std_dev(variance)
-    variance**0.5
+    return variance**0.5
   end
   
+  # Writes statistics to the outfile. The statistics contain:
+  # Score range, means, median, variance, standard deviation for genuines and impostors.
   def print_stats(outfile)
     File.open(outfile,'w') do |file|
       g_values, i_values = [], []
@@ -139,37 +147,33 @@ class ResultsAnalyzer
     end
   end
   
+  # Builds the histogram and calls print_stats and error_rates. Furthermore, it prints the Equal Error Rate to a file.
   def histogram
-    @datafiles_grouped_by_algo.each do |algo,files| #algo = masek/projectiris
-      print "Processing results for #{algo}\n"
+    @datafiles_grouped_by_algo.each do |algo,files| # algo = masek/projectiris, files e.g. ["matches/masek_genuines.txt", "matches/masek_impostors.txt"]
+      print "\nProcessing results for #{algo}\n"
       @algos << algo
       reset
-      @datafiles_grouped_by_algo[algo].sort!
-      files.each do |file|
+      files.each do |file| # read comparison strings
         dists = []
-        key = file =~ /genuines/ ? :genuines : :impostors
-        File.open(file, 'r').each_line { |line| dists << line.chomp.split('|').last.to_f.round(2) }
-        dists.inject(@histogram[key]) { |h, e| h[e] += 1 ; h }
+        key = file =~ /genuines/ ? :genuines : :impostors # if the filename contains the 'genuines', set the key to :genuines, else to :impostors
+        File.open(file, 'r').each_line { |line| dists << line.chomp.split('|').last.to_f.round(2) } # extract and round score from comparison string (e.g. 001_1_1.bmp|001_1_2.bmp|0.27808)
+        dists.inject(@histogram[key]) { |h, e| h[e] += 1 ; h } # count occurrences of each score in the read file
       end
       print "  Building histogram...\n"
-      File.open("results/histogram_#{algo}",'w') do |file|
-        101.times do |i|
-          key = i.to_f/100
-          file.print "#{@histogram[:genuines][key]} #{@histogram[:impostors][key]}\n"
-        end
-      end
+      File.open("results/histogram_#{algo}",'w') { |file| (0..100).each { |i| key = i.to_f/100; file.print "#{@histogram[:genuines][key]} #{@histogram[:impostors][key]}\n" } }
       print_stats("results/stats_#{algo}")
       error_rates(algo)
     end
-    File.open('results/eer', 'w') do |file|
+    File.open('results/eer', 'w') do |file| # print EERs to file
       @eer.each do |algo, values|
         file.puts algo
-        file.print "Threshold:".ljust(15), values[:index]/100.0, "\n"
+        file.print "Threshold:".ljust(15), values[:threshold]/100.0, "\n"
         file.print "Error rate:".ljust(15), values[:eer], "\n\n"
       end
     end
   end
   
+  # Computes the FMR and FNMR based on the histograms. Calls the error_rate helper method.
   def error_rates(algo)
     print "  Computing error rates...\n"
     values = @histogram[:impostors].values
@@ -193,26 +197,25 @@ class ResultsAnalyzer
     @error_rates[key].map! { |value| 100*value.to_f/total }
   end
   
-  # FVC2000
+  # Computes the EER using the FVC2000 formula:
+  # t1 stores the highest threshold for which FNMR >= FMR
+  # t2 stores the lowest threshold for which FNMR <= FMR
+  # t1_sum stores the sum of FMR and FNMR for t1
+  # t2_sum stores the sum of FMR and FNMR for t2
+  # Finally, the lowest sum is chosen and divided by two to get the EER.
+  # The threshold is the one of the lowest sum.
   def equal_error_rate(algo)
     t1, t2 = nil, nil
-    count = @error_rates[:genuines].length
-    min = { delta: 100.0, index: nil }
-    delta = nil
-    count.times do |i|
+    delta = nil # difference of FNMR and FMR
+    (0..100).each do |i|
       delta = @error_rates[:genuines][i] - @error_rates[:impostors][i]
       t1 = i if delta >= 0
       t2 = i if delta <= 0
-#      min = { delta: delta, index: i } if delta < min[:delta] and delta >= 0
-#      print "i = #{i}, FNMR = #{@error_rates[:genuines][i]}, FMR = #{@error_rates[:impostors][i]}, delta = #{delta}\n"
     end
     t1_sum = @error_rates[:genuines][t1] + @error_rates[:impostors][t1]
     t2_sum = @error_rates[:genuines][t2] + @error_rates[:impostors][t2]
     t = t1_sum <= t2_sum ? t1 : t2
-    eer_low, eer_high = @error_rates[:genuines][t], @error_rates[:impostors][t]
-    eer = (eer_low + eer_high)/2.0
-    result = { index: t, eer: eer}
-    @eer.merge!({algo => result})
+    @eer.merge!({algo => { threshold: t, eer: (@error_rates[:genuines][t] + @error_rates[:impostors][t])/2.0 }})
   end
 end
 
@@ -226,9 +229,7 @@ class Plotter
   
   def style
     [ "set termoption dash",
-    "fontsize(x)=((GPVAL_TERM eq 'postscript') && (strstrt(GPVAL_TERMOPTIONS,'eps')!=0)) ? x*2 : x",
-#    "set terminal pngcairo dashed mono size 1024,768",# enhanced font 'Vera' 26",
-    "set terminal pdfcairo dashed enh mono size 10in, 8in",# dashed mono size 1024,768",# enhanced font 'Vera' 26",
+    "set terminal pdfcairo dashed enh mono size 10in, 8in",
     "set termoption font 'Arial,15'",
     "set style line 80 lt rgb '#000000'", # Line style for axes
     "set style line 81 lt 0",
@@ -246,35 +247,32 @@ class Plotter
     "set xlabel font ', 20'",
     "set ylabel font ', 20'",
     "set key samplen 2 spacing 2 tmargin font ', 20'",
-#    "set lmargin at screen 0.10",
-#    "set rmargin at screen 0.95",
-#    "set bmargin at screen 0.1"
     ]
   end
 
   def histogram(algo)
     print "  Histogram...\n"
     plot({title: "Histogram", xlabel: "Hamming distance", ylabel: "Frequency", filename_prefix: "histogram_#{algo}", logscale: "y", xrange: "[-1:101]", yrange: "[0.1:2000]", xtics: "('0' 0, '0.1' 10, '0.2' 20, '0.3' 30, '0.4' 40, '0.5' 50, '0.6' 60, '0.7' 70, '0.8' 80, '0.9' 90, '1' 100)", ytics: "10" }) do
-      #"plot 'results/histogram_#{algo}' u 2 w histograms fs transparent pattern 3 title 'impostors', '' u 1 w histograms fs transparent pattern 2 title 'genuines'"
-      "plot 'results/histogram_#{algo}' u 2 w histograms lc rgb '#77999999' title 'impostors', '' u 1 w histograms lc rgb '#77222222' title 'genuines'"    end
+      "plot 'results/histogram_#{algo}' u 2 w histograms lc rgb '#77999999' title 'impostors', '' u 1 w histograms lc rgb '#77222222' title 'genuines'"
+    end
   end
   
   def error_rates(algo)
     print "  Error distributions...\n"
     plot({title: "Error distributions", xlabel: "Threshold", ylabel: "Error (%)", filename_prefix: "distributions_#{algo}", logscale: false, xrange: "[0:100]", yrange: "[0:100]", xtics: "('0' 0, '0.1' 10, '0.2' 20, '0.3' 30, '0.4' 40, '0.5' 50, '0.6' 60, '0.7' 70, '0.8' 80, '0.9' 90, '1' 100)", ytics: "10" }) do
-      "set label 1 'EER' at #{@eer[algo][:index]-10},85 tc lt 1; set arrow from #{@eer[algo][:index]},graph(0,0) to #{@eer[algo][:index]},graph(1,1) nohead lc rgb '#ff0000' lw 7; plot 'results/error_rates_#{algo}' u 1 w l ls 1 title 'FNMR(t)', '' u 2 w l ls 2 title 'FMR(t)'"
+      "set label 1 'EER' at #{@eer[algo][:threshold]-10},85 tc lt 1; set arrow from #{@eer[algo][:threshold]},graph(0,0) to #{@eer[algo][:threshold]},graph(1,1) nohead lc rgb '#ff0000' lw 7; plot 'results/error_rates_#{algo}' u 1 w l ls 1 title 'FNMR(t)', '' u 2 w l ls 2 title 'FMR(t)'"
     end
   end
   
   def roc(cmd)
-    print "Plotting ROC...\n"
+    print "\nPlotting ROC...\n"
     plot({title: "ROC Curve", xlabel: "False Match Rate FMR(t)", ylabel: "Verification rate (100-FNMR(t))", filename_prefix: "roc", logscale: false, xrange: "[0:100]", yrange: "[70:100]", xtics: "10", ytics: "('70' 70, '80' 80, '90' 90, '100' 100)" }) do
       "plot #{cmd}"
     end
   end
   
   def det(cmd)
-    print "Plotting DET...\n"
+    print "\nPlotting DET...\n"
     plot({title: "DET Curve", xlabel: "FMR(t)", ylabel: "FNMR(t)", filename_prefix: "det", logscale: false, xrange: "[0:100]", yrange: "[0:100]", xtics: "10", ytics: "10" }) do
       "plot #{cmd}"
     end
@@ -283,7 +281,7 @@ class Plotter
   def plot_graphs
     roc_cmd, det_cmd = "", ""
     @algos.each_with_index do |algo, index|
-      print "Plotting graphs for #{algo}\n"
+      print "\nPlotting graphs for #{algo}\n"
       histogram(algo)
       error_rates(algo)      
       roc_cmd << "'results/error_rates_#{algo}' u 2:(100-$1) w l ls #{(index+1)%5} title '#{algo}'"
@@ -300,7 +298,7 @@ class Plotter
     gp.puts "set xlabel '#{data[:xlabel]}'"
     gp.puts "set ylabel '#{data[:ylabel]}'"
     filename = "#{data[:filename_prefix]}.pdf"
-    gp.puts "set output '/home/giorgos/hda/SS13/bio/Ausarbeitung/_images/#{filename}'"#'results/#{filename}'"
+    gp.puts "set output 'results/#{filename}'"
     gp.puts "set xrange #{data[:xrange]}" if data[:xrange]
     gp.puts "set yrange #{data[:yrange]}" if data[:yrange]
     gp.puts "set xtics #{data[:xtics]} nomirror" if data[:xtics]
@@ -311,7 +309,6 @@ class Plotter
     gp.puts "set key #{data[:key]}" if data[:key]
     gp.puts yield
   end
-  
   
 end
 
